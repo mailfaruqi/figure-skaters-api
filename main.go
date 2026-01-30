@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"figure-skaters/database"
+	"figure-skaters-api/database"
+	"figure-skaters-api/handlers"
+	"figure-skaters-api/repositories"
+	"figure-skaters-api/services"
 	"fmt"
-	"kasir-api/handlers"
-	"kasir-api/repositories"
-	"kasir-api/services"
 	"log"
 	"net/http"
 	"os"
