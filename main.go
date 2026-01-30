@@ -87,75 +87,111 @@ import (
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/spf13/viper"
+	"strings"
 )
 
 type Config struct {
-	Port   string `mapstructure:"PORT"`
-	DBConn string `mapstructure:"DB_CONN"`
+	Port   string
+	DBConn string
 }
 
-func main() {
-	// Setup Viper
-	viper.AutomaticEnv()
-	
-	// Bind specific env vars
-	viper.BindEnv("PORT")
-	viper.BindEnv("DB_CONN")
-	
-	// Read .env if exists (for local development)
-	if _, err := os.Stat(".env"); err == nil {
-		viper.SetConfigFile(".env")
-		_ = viper.ReadInConfig()
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func loadConfig() Config {
+	dbConn := os.Getenv("DB_CONN")
+	port := os.Getenv("PORT")
+
+	if dbConn == "" || port == "" {
+		log.Println("Environment variables not found, trying .env file...")
+		if err := loadEnvFile(".env"); err == nil {
+			if dbConn == "" {
+				dbConn = os.Getenv("DB_CONN")
+			}
+			if port == "" {
+				port = os.Getenv("PORT")
+			}
+		}
 	}
 
-	// Get config with fallback defaults
-	port := viper.GetString("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	
-	dbConn := viper.GetString("DB_CONN")
+
 	if dbConn == "" {
-		log.Fatal("DB_CONN environment variable is required")
+		log.Fatal("❌ DB_CONN environment variable is not set!")
 	}
 
-	config := Config{
+	log.Printf("✅ PORT: %s", port)
+	log.Printf("✅ DB_CONN: %s", maskConnectionString(dbConn))
+
+	return Config{
 		Port:   port,
 		DBConn: dbConn,
 	}
+}
 
-	// Debug log (remove in production)
-	log.Printf("PORT: %s\n", config.Port)
-	log.Printf("DB_CONN: %s\n", maskConnectionString(config.DBConn))
+func loadEnvFile(filename string) error {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
 
-	// Setup database
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			os.Setenv(key, value)
+		}
+	}
+
+	return nil
+}
+
+func maskConnectionString(connStr string) string {
+	if len(connStr) < 30 {
+		return "[HIDDEN]"
+	}
+	return connStr[:25] + "***" + connStr[len(connStr)-15:]
+}
+
+func main() {
+	log.Println("🚀 Starting Figure Skating API...")
+
+	config := loadConfig()
+
+	log.Println("📦 Connecting to database...")
 	db, err := database.InitDB(config.DBConn)
 	if err != nil {
-		log.Fatal("Failed to initialize database:", err)
+		log.Fatalf("❌ Failed to initialize database: %v", err)
 	}
 	defer db.Close()
+	log.Println("✅ Database connected successfully")
 
-	// Setup Category
 	categoryRepo := repositories.NewCategoryRepository(db)
-	categoryService := services.NewCategoryService(categoryRepo)
-	categoryHandler := handlers.NewCategoryHandler(categoryService)
-
-	// Setup Element
 	elementRepo := repositories.NewElementRepository(db)
+
+	categoryService := services.NewCategoryService(categoryRepo)
 	elementService := services.NewElementService(elementRepo)
+
+	categoryHandler := handlers.NewCategoryHandler(categoryService)
 	elementHandler := handlers.NewElementHandler(elementService)
 
-	// Setup routes for categories
 	http.HandleFunc("/api/categories", categoryHandler.HandleCategories)
 	http.HandleFunc("/api/categories/", categoryHandler.HandleCategoryByID)
-
-	// Setup routes for elements
 	http.HandleFunc("/api/elements", elementHandler.HandleElements)
 	http.HandleFunc("/api/elements/", elementHandler.HandleElementByID)
 
-	// Health check
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -164,17 +200,18 @@ func main() {
 		})
 	})
 
-	fmt.Println("Server running on port " + config.Port)
-	err = http.ListenAndServe(":"+config.Port, nil)
-	if err != nil {
-		log.Fatal("Failed to start server:", err)
-	}
-}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Welcome to Figure Skating API",
+			"version": "1.0.0",
+		})
+	})
 
-// Helper function to mask sensitive data in logs
-func maskConnectionString(connStr string) string {
-	if len(connStr) < 30 {
-		return "***"
+	log.Printf("✅ Server starting on port %s", config.Port)
+	fmt.Printf("🌐 Server running on port %s\n", config.Port)
+
+	if err := http.ListenAndServe("0.0.0.0:"+config.Port, nil); err != nil {
+		log.Fatalf("❌ Failed to start server: %v", err)
 	}
-	return connStr[:20] + "***" + connStr[len(connStr)-10:]
 }
