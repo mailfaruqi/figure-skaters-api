@@ -2,28 +2,62 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func InitDB(connectionString string) (*sql.DB, error) {
-	// Open database
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, err
-	}
+// Log connection attempt (hide password)
+log.Println("Attempting to connect to database...")
 
-	// Test connection
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
-
-	// Set connection pool settings (optional but recommended)
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-
-	log.Println("Database connected successfully")
-	return db, nil
+// Open database
+db, err := sql.Open("pgx", connectionString)
+if err != nil {
+return nil, fmt.Errorf("error opening database: %w", err)
 }
+
+// Test connection
+err = db.Ping()
+if err != nil {
+return nil, fmt.Errorf("error pinging database: %w", err)
+}
+
+// Set connection pool settings
+db.SetMaxOpenConns(25)
+db.SetMaxIdleConns(5)
+
+log.Println("Database connected successfully")
+return db, nil
+}
+
+// package database
+
+// import (
+// 	"database/sql"
+// 	"log"
+
+// 	_ "github.com/lib/pq"
+// )
+
+// func InitDB(connectionString string) (*sql.DB, error) {
+// 	// Open database
+// 	db, err := sql.Open("postgres", connectionString)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	// Test connection
+// 	err = db.Ping()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	// Set connection pool settings (optional but recommended)
+// 	db.SetMaxOpenConns(25)
+// 	db.SetMaxIdleConns(5)
+
+// 	log.Println("Database connected successfully")
+// 	return db, nil
+// }
