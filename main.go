@@ -16,51 +16,61 @@ import (
 )
 
 type Config struct {
-	Port   string `mapstructure:"PORT"`
-	DBConn string `mapstructure:"DB_CONN"`
+Port   string `mapstructure:"PORT"`
+DBConn string `mapstructure:"DB_CONN"`
 }
 
 func main() {
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+viper.AutomaticEnv()
+viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	if _, err := os.Stat(".env"); err == nil {
-		viper.SetConfigFile(".env")
-		_ = viper.ReadInConfig()
-	}
+if _, err := os.Stat(".env"); err == nil {
+viper.SetConfigFile(".env")
+_ = viper.ReadInConfig()
+}
 
-	config := Config{
-		Port:   viper.GetString("PORT"),
-		DBConn: viper.GetString("DB_CONN"),
-	}
+config := Config{
+Port:   viper.GetString("PORT"),
+DBConn: viper.GetString("DB_CONN"),
+}
 
-	// Setup database
-	db, err := database.InitDB(config.DBConn)
-	if err != nil {
-		log.Fatal("Failed to initialize database:", err)
-	}
-	defer db.Close()
+// Setup database
+db, err := database.InitDB(config.DBConn)
+if err != nil {
+log.Fatal("Failed to initialize database:", err)
+}
+defer db.Close()
 
-	productRepo := repositories.NewProductRepository(db)
-	productService := services.NewProductService(productRepo)
-	productHandler := handlers.NewProductHandler(productService)
+// Setup Category
+categoryRepo := repositories.NewCategoryRepository(db)
+categoryService := services.NewCategoryService(categoryRepo)
+categoryHandler := handlers.NewCategoryHandler(categoryService)
 
-	// Setup routes
-	http.HandleFunc("/api/produk", productHandler.HandleProducts)
-	http.HandleFunc("/api/produk/", productHandler.HandleProductByID)
+// Setup Element
+elementRepo := repositories.NewElementRepository(db)
+elementService := services.NewElementService(elementRepo)
+elementHandler := handlers.NewElementHandler(elementService)
 
-	// localhost:8080/health
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status":  "OK",
-			"message": "API Running",
-		})
-	})
-	fmt.Println("Server running at localhost:" + config.Port)
+// Setup routes for categories
+http.HandleFunc("/api/categories", categoryHandler.HandleCategories)
+http.HandleFunc("/api/categories/", categoryHandler.HandleCategoryByID)
 
-	err = http.ListenAndServe(":"+config.Port, nil)
-	if err != nil {
-		fmt.Println("failed running server")
-	}
+// Setup routes for elements
+http.HandleFunc("/api/elements", elementHandler.HandleElements)
+http.HandleFunc("/api/elements/", elementHandler.HandleElementByID)
+
+// Health check
+http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]string{
+"status":  "OK",
+"message": "Figure Skating Elements API Running",
+})
+})
+
+fmt.Println("Server running at localhost:" + config.Port)
+err = http.ListenAndServe(":"+config.Port, nil)
+if err != nil {
+fmt.Println("failed running server")
+}
 }
